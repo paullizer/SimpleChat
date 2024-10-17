@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **Simple Chat Application** is designed to enable users to interact with a generative AI model via a web-based chat interface. The application supports Retrieval-Augmented Generation (RAG), allowing users to upload documents and perform hybrid searches against them, enhancing the quality of responses by combining AI knowledge with custom user data. The application runs on **Azure App Service**, specifically designed to work in **Azure Government**, but it also functions in **Azure Commercial** environments.
+The **Simple Chat Application** is designed to enable users to interact with a generative AI model via a web-based chat interface. It supports **Retrieval-Augmented Generation (RAG)**, allowing users to enhance the AI’s responses with custom data by uploading documents. The application uses **inline temporary file storage** for short-term processing and **Azure AI Search** for long-term document retrieval and storage, enabling efficient hybrid searches. The application is built to run on **Azure App Service**, tailored for use in **Azure Government**, but it also works seamlessly in **Azure Commercial** environments.
 
 ## Features
 
