@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Chats</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* Custom styles for the Conversations List */
+        #conversations-list {
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .conversation-item {
+            cursor: pointer;
+            padding: 10px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .conversation-item:hover, .conversation-item.active {
+            background-color: #f8f9fa;
+        }
+        /* Chatbox styling */
+        #chatbox {
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row vh-100">
+            <!-- Left Pane: Conversations List -->
+            <div class="col-md-3 border-end">
+                <div class="d-flex justify-content-between align-items-center p-3">
+                    <h5>Your Conversations</h5>
+                    <button class="btn btn-primary btn-sm" id="new-conversation-btn">New</button>
+                </div>
+                <div id="conversations-list" class="list-group list-group-flush">
+                    <!-- Conversations will be dynamically loaded here -->
+                </div>
+            </div>
+            <!-- Right Pane: Chat Interface -->
+            <div class="col-md-9 d-flex flex-column">
+                <div class="p-3 border-bottom">
+                    <h5 id="current-conversation-title">Select a conversation</h5>
+                </div>
+                <div id="chatbox" class="flex-grow-1 p-3">
+                    <!-- Chat messages will be dynamically loaded here -->
+                </div>
+                <div class="p-3 border-top">
+                    <div class="input-group">
+                        <input type="text" id="user-input" class="form-control" placeholder="Type your message here..." disabled>
+                        <button class="btn btn-primary" id="send-btn" disabled>Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS and dependencies (Popper) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Your custom JavaScript -->
+    <script>
+        // Global variables
+        let currentConversationId = null;
+
+        // Function to load all conversations
+        function loadConversations() {
+            fetch('/api/get_conversations')
+                .then(response => response.json())
+                .then(data => {
+                    const conversationsList = document.getElementById('conversations-list');
+                    conversationsList.innerHTML = '';  // Clear existing list
+                    data.conversations.forEach(convo => {
+                        const convoItem = document.createElement('div');
+                        convoItem.classList.add('list-group-item', 'conversation-item');
+                        convoItem.setAttribute('data-conversation-id', convo.id);
+                        const date = new Date(convo.last_updated);
+                        convoItem.innerHTML = `
+                            <div class="d-flex justify-content-between">
+                                <span>${convo.id}</span>
+                                <small>${date.toLocaleString()}</small>
+                            </div>
+                        `;
+                        conversationsList.appendChild(convoItem);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading conversations:', error);
+                });
+        }
+
+        // Function to select a conversation
+        function selectConversation(conversationId) {
+            currentConversationId = conversationId;
+            document.getElementById('user-input').disabled = false;
+            document.getElementById('send-btn').disabled = false;
+            document.getElementById('current-conversation-title').textContent = `Conversation: ${conversationId}`;
+            loadMessages(conversationId);
+            highlightSelectedConversation(conversationId);
+        }
+
+        // Function to highlight the selected conversation
+        function highlightSelectedConversation(conversationId) {
+            const items = document.querySelectorAll('.conversation-item');
+            items.forEach(item => {
+                if (item.getAttribute('data-conversation-id') === conversationId) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+        }
+
+        // Function to load messages for a conversation
+        function loadMessages(conversationId) {
+            fetch(`/api/get_messages?conversation_id=${conversationId}`)
+                .then(response => response.json())
+                .then(data => {
+                    const chatbox = document.getElementById('chatbox');
+                    chatbox.innerHTML = '';  // Clear existing messages
+                    data.messages.forEach(msg => {
+                        appendMessage(msg.role === 'user' ? 'You' : 'AI', msg.content);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading messages:', error);
+                });
+        }
+
+        // Function to append a message to the chatbox
+        function appendMessage(sender, message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('mb-2');
+
+            if (sender === 'System') {
+                // Skip rendering system messages
+                return;
+            }
+
+            if (sender === 'You') {
+                messageDiv.innerHTML = `<strong>You:</strong> ${message}`;
+            } else if (sender === 'AI') {
+                // Parse message to convert citations into links
+                const parsedMessage = parseCitations(message);
+                messageDiv.innerHTML = `<strong>AI:</strong> ${parsedMessage}`;
+            }
+
+            document.getElementById('chatbox').appendChild(messageDiv);
+            // Scroll to the bottom
+            document.getElementById('chatbox').scrollTop = document.getElementById('chatbox').scrollHeight;
+        }
+
+        // Function to parse citations and convert them into clickable links
+        function parseCitations(message) {
+            // Regular expression to match citations in the format:
+            // (Source: filename, Page: page number) [#ID]
+            const citationRegex = /\(Source: ([^,]+), Page: ([^)]+)\) \[#([^\]]+)\]/g;
+
+            // Replace citations with links
+            const parsedMessage = message.replace(citationRegex, (match, filename, pageNumber, citationId) => {
+                const displayText = `(Source: ${filename}, Page: ${pageNumber})`;
+                return `<a href="#" class="citation-link" data-conversation-id="${currentConversationId}" data-citation-id="${citationId}">${displayText}</a>`;
+            });
+
+            return parsedMessage;
+        }
+
+        // Event delegation to handle clicks on conversation items
+        document.getElementById('conversations-list').addEventListener('click', (event) => {
+            const convoItem = event.target.closest('.conversation-item');
+            if (convoItem) {
+                const conversationId = convoItem.getAttribute('data-conversation-id');
+                selectConversation(conversationId);
+            }
+        });
+
+        // Event delegation to handle clicks on citation links
+        document.getElementById('chatbox').addEventListener('click', (event) => {
+            if (event.target && event.target.matches('a.citation-link')) {
+                event.preventDefault();
+                const citationId = event.target.getAttribute('data-citation-id');
+                fetchCitedText(citationId);
+            }
+        });
+
+        // Function to fetch cited text from the backend
+        function fetchCitedText(citationId) {
+            console.log(`Fetching cited text for citation_id: ${citationId}`);  // Debugging line
+            // Show loading indicator
+            showLoadingIndicator();
+
+            fetch('/api/get_citation', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ citation_id: citationId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoadingIndicator();
+                console.log('Cited Text Data:', data);  // Debugging line
+
+                if (data.cited_text && data.file_name && data.page_number) {
+                    // Display the cited text in a popup or sidebar with dynamic title
+                    showCitedTextPopup(data.cited_text, data.file_name, data.page_number);
+                } else if (data.error) {
+                    console.error('Error from server:', data.error);  // Debugging line
+                    alert(data.error);
+                } else {
+                    console.warn('Unexpected response structure:', data);  // Debugging line
+                    alert('Unexpected response from server.');
+                }
+            })
+            .catch(error => {
+                hideLoadingIndicator();
+                console.error('Error fetching cited text:', error);
+                alert('Error fetching cited text.');
+            });
+        }
+
+        // Function to display cited text in a Bootstrap modal with dynamic title
+        function showCitedTextPopup(citedText, fileName, pageNumber) {
+            console.log(`Displaying cited text popup: ${fileName}, Page: ${pageNumber}`);  // Debugging line
+
+            // Create the modal container if it doesn't exist
+            let modalContainer = document.getElementById('citation-modal');
+            if (!modalContainer) {
+                modalContainer = document.createElement('div');
+                modalContainer.id = 'citation-modal';
+                modalContainer.classList.add('modal', 'fade');
+                modalContainer.tabIndex = -1;
+                modalContainer.setAttribute('aria-hidden', 'true');
+
+                modalContainer.innerHTML = `
+                    <div class="modal-dialog modal-dialog-scrollable modal-xl modal-fullscreen-sm-down">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Source: ${fileName}, Page: ${pageNumber}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <pre id="cited-text-content" style="white-space: pre-wrap; word-wrap: break-word;"></pre>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modalContainer);
+            } else {
+                // Update the modal title if it already exists
+                const modalTitle = modalContainer.querySelector('.modal-title');
+                modalTitle.textContent = `Source: ${fileName}, Page: ${pageNumber}`;
+            }
+
+            // Set the cited text content
+            const citedTextContent = document.getElementById('cited-text-content');
+            citedTextContent.textContent = citedText;
+
+            // Show the modal using Bootstrap's modal plugin
+            const modal = new bootstrap.Modal(modalContainer);
+            modal.show();
+        }
+
+        // Function to show loading indicator
+        function showLoadingIndicator() {
+            // Create a loading spinner if it doesn't exist
+            let loadingSpinner = document.getElementById('loading-spinner');
+            if (!loadingSpinner) {
+                loadingSpinner = document.createElement('div');
+                loadingSpinner.id = 'loading-spinner';
+                loadingSpinner.innerHTML = `
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                `;
+                loadingSpinner.style.position = 'fixed';
+                loadingSpinner.style.top = '50%';
+                loadingSpinner.style.left = '50%';
+                loadingSpinner.style.transform = 'translate(-50%, -50%)';
+                loadingSpinner.style.zIndex = '1050';
+                document.body.appendChild(loadingSpinner);
+            } else {
+                loadingSpinner.style.display = 'block';
+            }
+        }
+
+        // Function to hide loading indicator
+        function hideLoadingIndicator() {
+            const loadingSpinner = document.getElementById('loading-spinner');
+            if (loadingSpinner) {
+                loadingSpinner.style.display = 'none';
+            }
+        }
+
+        // Function to send a message (user input)
+        function sendMessage() {
+            const userInput = document.getElementById('user-input').value.trim();
+            if (userInput === '' || !currentConversationId) return;
+
+            appendMessage('You', userInput);
+            document.getElementById('user-input').value = '';
+
+            // Get the state of the checkbox
+            const hybridSearchEnabled = true; // Assuming hybrid search is always enabled on Chats page
+
+            fetch("/api/chat", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message: userInput,
+                    conversation_id: currentConversationId,
+                    hybrid_search: hybridSearchEnabled  // Include the checkbox state
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.reply) {
+                    appendMessage('AI', data.reply);
+                }
+                if (data.conversation_id) {
+                    currentConversationId = data.conversation_id;  // Update conversation ID if needed
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                appendMessage('Error', 'Could not get a response.');
+            });
+        }
+
+        // Event listener for send button
+        document.getElementById('send-btn').addEventListener('click', sendMessage);
+
+        // Event listener for Enter key
+        document.getElementById('user-input').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Event listener for New Conversation button
+        document.getElementById('new-conversation-btn').addEventListener('click', () => {
+            fetch('/api/create_conversation', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.conversation_id) {
+                    // Automatically select the new conversation
+                    selectConversation(data.conversation_id);
+                    // Optionally, add it to the top of the conversations list
+                    const conversationsList = document.getElementById('conversations-list');
+                    const convoItem = document.createElement('div');
+                    convoItem.classList.add('list-group-item', 'conversation-item', 'active');
+                    convoItem.setAttribute('data-conversation-id', data.conversation_id);
+                    const date = new Date();
+                    convoItem.innerHTML = `
+                        <div class="d-flex justify-content-between">
+                            <span>${data.conversation_id}</span>
+                            <small>${date.toLocaleString()}</small>
+                        </div>
+                    `;
+                    // Prepend the new conversation
+                    conversationsList.prepend(convoItem);
+                    // Disable active state for others
+                    const items = document.querySelectorAll('.conversation-item');
+                    items.forEach(item => {
+                        if (item.getAttribute('data-conversation-id') !== data.conversation_id) {
+                            item.classList.remove('active');
+                        }
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error creating new conversation:', error);
+                alert('Failed to create a new conversation.');
+            });
+        });
+
+        // Load conversations on page load
+        window.onload = function() {
+            loadConversations();
+        };
+    </script>
+</body>
+</html>

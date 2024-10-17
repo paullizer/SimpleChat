@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Documents - AI Chat Application{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Your Documents</h2>
+    <!-- Document Upload Form -->
+    <div class="mb-3">
+        <input type="file" id="file-input" />
+        <button id="upload-btn" class="btn btn-primary">Upload Document</button>
+    </div>
+
+    <!-- Documents List -->
+    <table class="table table-striped" id="documents-table">
+        <thead>
+            <tr>
+                <th>File Name</th>
+                <th>Upload Date</th>
+                <th>Version</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Documents will be populated here -->
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const fileInput = document.getElementById('file-input');
+    const uploadBtn = document.getElementById('upload-btn');
+    const documentsTableBody = document.querySelector('#documents-table tbody');
+
+    // Fetch and display user's documents
+    function fetchUserDocuments() {
+        fetch('/api/documents')
+            .then(response => response.json())
+            .then(data => {
+                documentsTableBody.innerHTML = '';
+                data.documents.forEach(doc => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${doc.file_name}</td>
+                        <td>${new Date(doc.upload_date).toLocaleString()}</td>
+                        <td>${doc.version}</td>
+                        <td>
+                            <button class="btn btn-sm btn-danger" onclick="deleteDocument('${doc.id}')">Delete</button>
+                        </td>
+                    `;
+                    documentsTableBody.appendChild(row);
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching documents:', error);
+            });
+    }
+
+    // Upload Document
+    uploadBtn.addEventListener('click', () => {
+        const file = fileInput.files[0];
+        if (!file) {
+            alert('Please select a file to upload.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        fetch('/api/documents/upload', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            alert(data.message);
+            fetchUserDocuments(); // Refresh the documents list
+        })
+        .catch(error => {
+            console.error('Error uploading document:', error);
+        });
+    });
+
+    // Delete Document
+    function deleteDocument(documentId) {
+        if (!confirm('Are you sure you want to delete this document?')) return;
+
+        fetch(`/api/documents/${documentId}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            alert(data.message);
+            fetchUserDocuments(); // Refresh the documents list
+        })
+        .catch(error => {
+            console.error('Error deleting document:', error);
+        });
+    }
+
+    // Initial fetch
+    fetchUserDocuments();
+</script>
+{% endblock %}

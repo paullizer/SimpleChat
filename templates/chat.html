@@ -1,0 +1,284 @@
+<!-- templates/chat.html -->
+{% extends "base.html" %}
+
+{% block title %}Chat - AI Chat Application{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <div id="chatbox" class="mb-3" style="height: 400px; overflow-y: auto;">
+            {% for message in messages %}
+            <div class="mb-2">
+                {% if message.role == 'user' %}
+                <strong>You:</strong> {{ message.content }}
+                {% elif message.role == 'assistant' %}
+                <strong>AI:</strong> {{ message.content }}
+                {% elif message.role == 'system' %}
+                <em>{{ message.content }}</em>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        <!-- User Input and Send Button -->
+        <div class="input-group mb-3">
+            <input type="text" id="user-input" class="form-control" placeholder="Type your message here..." autocomplete="off" />
+            <button id="send-btn" class="btn btn-primary">Send</button>
+        </div>
+        <!-- Hybrid Search Checkbox -->
+        <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="hybrid-search-checkbox">
+            <label class="form-check-label" for="hybrid-search-checkbox">
+                Enable hybrid search on my documents
+            </label>
+        </div>
+        <!-- File Upload Button -->
+        <div class="mb-3">
+            <input type="file" id="file-input" accept=".txt,.pdf,.docx,.xlsx,.pptx,.html,.jpg,.jpeg,.png,.bmp,.tiff,.tif,.heif,.md,.json" />
+            <button id="upload-btn" class="btn btn-secondary">Upload File</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const chatbox = document.getElementById('chatbox');
+    const userInput = document.getElementById('user-input');
+    const sendBtn = document.getElementById('send-btn');
+    const fileInput = document.getElementById('file-input');
+    const uploadBtn = document.getElementById('upload-btn');
+    let conversationId = "{{ conversation_id or '' }}";
+
+    function appendMessage(sender, message) {
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add('mb-2');
+
+        if (sender === 'System') {
+            // Skip rendering system messages
+            return;
+        }
+
+        if (sender === 'You') {
+            messageDiv.innerHTML = `<strong>${sender}:</strong> ${message}`;
+        } else if (sender === 'AI') {
+            // Parse message to convert citations into links
+            const parsedMessage = parseCitations(message);
+            messageDiv.innerHTML = `<strong>${sender}:</strong> ${parsedMessage}`;
+        }
+
+        chatbox.appendChild(messageDiv);
+        chatbox.scrollTop = chatbox.scrollHeight;
+    }
+
+    function parseCitations(message) {
+        // Regular expression to match citations in the format:
+        // (Source: filename, Page: page number) [#ID]
+        const citationRegex = /\(Source: ([^,]+), Page: ([^)]+)\) \[#([^\]]+)\]/g;
+
+        // Replace citations with links
+        const parsedMessage = message.replace(citationRegex, (match, filename, pageNumber, citationId) => {
+            const displayText = `(Source: ${filename}, Page: ${pageNumber})`;
+            return `<a href="#" class="citation-link" data-citation-id="${citationId}">${displayText}</a>`;
+        });
+
+        return parsedMessage;
+    }
+
+
+    function fetchConversation(conversationId) {
+        if (!conversationId) {
+            console.error('No conversationId provided');
+            return;
+        }
+        fetch("/conversation/" + conversationId + "/messages")
+        .then(response => response.json())
+        .then(data => {
+            if (data.messages) {
+                // Clear the chatbox
+                chatbox.innerHTML = '';
+                data.messages.forEach(message => {
+                    if (message.role === 'user') {
+                        appendMessage('You', message.content);
+                    } else if (message.role === 'assistant') {
+                        appendMessage('AI', message.content);
+                    } else if (message.role === 'system') {
+                        appendMessage('System', message.content);
+                    }
+                });
+            } else if (data.error) {
+                console.error('Error:', data.error);
+                appendMessage('Error', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching conversation:', error);
+        });
+    }
+
+    function fetchCitedText(citationId) {
+        fetch('/api/get_citation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ citation_id: citationId })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.cited_text) {
+                // Display the cited text in a popup or sidebar
+                showCitedTextPopup(data.cited_text);
+            } else if (data.error) {
+                alert(data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching cited text:', error);
+            alert('Error fetching cited text.');
+        });
+    }
+
+    function showCitedTextPopup(citedText) {
+        // Create the modal container if it doesn't exist
+        let modalContainer = document.getElementById('citation-modal');
+        if (!modalContainer) {
+            modalContainer = document.createElement('div');
+            modalContainer.id = 'citation-modal';
+            modalContainer.classList.add('modal', 'fade');
+            modalContainer.tabIndex = -1;
+            modalContainer.setAttribute('aria-hidden', 'true');
+
+            modalContainer.innerHTML = `
+                <div class="modal-dialog modal-dialog-scrollable modal-xl"> <!-- Changed modal-xl for extra large modal -->
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Citation</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <pre id="cited-text-content" style="white-space: pre-wrap;"></pre>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modalContainer);
+        }
+
+        // Set the cited text content
+        const citedTextContent = document.getElementById('cited-text-content');
+        citedTextContent.textContent = citedText;
+
+        // Show the modal using Bootstrap's modal plugin
+        const modal = new bootstrap.Modal(modalContainer);
+        modal.show();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (conversationId) {
+            fetchConversation(conversationId);
+        }
+    });
+
+    sendBtn.addEventListener('click', () => {
+        const message = userInput.value.trim();
+        if (message === '') return;
+
+        appendMessage('You', message);
+        userInput.value = '';
+
+        // Get the state of the checkbox
+        const hybridSearchEnabled = document.getElementById('hybrid-search-checkbox').checked;
+
+        fetch("{{ url_for('chat_api') }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                message: message,
+                conversation_id: conversationId,
+                hybrid_search: hybridSearchEnabled  // Include the checkbox state
+            }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.reply) {
+                appendMessage('AI', data.reply);
+            }
+            if (data.conversation_id) {
+                conversationId = data.conversation_id;  // Update conversation ID
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            appendMessage('Error', 'Could not get a response.');
+        });
+    });
+
+
+    // Allow sending message on Enter key press
+    userInput.addEventListener('keypress', (event) => {
+        if (event.key === 'Enter') {
+            sendBtn.click();
+            event.preventDefault();
+        }
+    });
+
+    // Handle File Upload
+    uploadBtn.addEventListener('click', () => {
+        const file = fileInput.files[0];
+        if (!file) {
+            alert('Please select a file to upload.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        // Only append conversation_id if it's not empty
+        if (conversationId) {
+            formData.append('conversation_id', conversationId);
+        }
+
+        fetch("{{ url_for('upload_file') }}", {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            // Clone the response to read the JSON body
+            let clonedResponse = response.clone();
+            return response.json().then(data => {
+                if (!response.ok) {
+                    // Handle HTTP errors
+                    console.error('Upload failed:', data.error || 'Unknown error');
+                    appendMessage('Error', data.error || 'Could not upload the file.');
+                    throw new Error(data.error || 'Upload failed');
+                }
+                return data;
+            });
+        })
+        .then(data => {
+            console.log('Upload response data:', data);
+            if (data.conversation_id) {
+                conversationId = data.conversation_id;  // Update conversation ID
+                fetchConversation(conversationId);      // Fetch and display updated conversation
+            } else {
+                console.error('No conversation_id returned from server.');
+                appendMessage('Error', 'Could not retrieve conversation ID.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            appendMessage('Error', error.message);
+        });
+    });
+
+    // Event delegation to handle clicks on dynamically added citation links
+    chatbox.addEventListener('click', (event) => {
+        if (event.target && event.target.matches('a.citation-link')) {
+            event.preventDefault();
+            const citationId = event.target.getAttribute('data-citation-id');
+            fetchCitedText(citationId);
+        }
+    });
+
+
+</script>
+{% endblock %}

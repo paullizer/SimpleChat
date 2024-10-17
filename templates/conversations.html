@@ -1,0 +1,20 @@
+<!-- templates/conversations.html -->
+{% extends "base.html" %}
+
+{% block title %}Your Conversations{% endblock %}
+
+{% block content %}
+<h2>Your Conversations</h2>
+{% if conversations %}
+    <div class="list-group">
+        {% for conv in conversations %}
+        <a href="{{ url_for('view_conversation', conversation_id=conv.id) }}" class="list-group-item list-group-item-action">
+            Conversation on {{ conv.last_updated | to_datetime | format_datetime }}
+        </a>
+        {% endfor %}
+    </div>
+{% else %}
+    <p>No conversations found.</p>
+{% endif %}
+<a href="{{ url_for('chat') }}" class="btn btn-primary mt-3">Start New Conversation</a>
+{% endblock %}

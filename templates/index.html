@@ -1,0 +1,12 @@
+<!-- templates/index.html -->
+{% extends "base.html" %}
+
+{% block title %}Home - AI Chat Application{% endblock %}
+
+{% block content %}
+<div class="text-center">
+    <h2>Welcome to the AI Chat Application</h2>
+    <p>Click the button below to start chatting with the AI assistant.</p>
+    <a href="{{ url_for('chat') }}" class="btn btn-primary btn-lg">Start Chatting</a>
+</div>
+{% endblock %}
