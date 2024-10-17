@@ -1,4 +1,4 @@
-# Simple Chat Application - README
+# Simple Chat Application
 
 ## Overview
 
@@ -327,10 +327,6 @@ All user conversations are stored in Azure Cosmos DB, allowing users to revisit 
 - **View Past Conversations**: Users can click on "Your Conversations" in the navigation bar to view a list of all previous conversations.
 - **Resuming a Conversation**: By selecting a conversation, users can review previous exchanges and continue chatting from where they left off.
 - **Conversation History**: The application maintains a limited history of the last 10 messages within each conversation for context.
-
----
-
-This intuitive workflow makes it easy for users to chat with the AI, enhance responses with document data, and manage both conversations and documents.
 
 ## License
 
